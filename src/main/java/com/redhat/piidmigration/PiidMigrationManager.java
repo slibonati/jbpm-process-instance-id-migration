@@ -12,7 +12,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Map;
 
 import org.drools.core.common.InternalWorkingMemory;
@@ -164,7 +163,7 @@ public class PiidMigrationManager {
             //Marshall the object back into a byte array.
             byte[] marshalledWorkItemByteArray = marshalWorkItem(workItem, kieSession);
             
-            /Write back to the DB.
+            //Write back to the DB.
             LargeObject objWrite = lobj.open(oid, LargeObjectManager.WRITE);
             objWrite.write(marshalledWorkItemByteArray);
             conn.commit();
