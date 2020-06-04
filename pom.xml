@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.acme</groupId>
+  <artifactId>processinstanceid-migration</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+  <name>Process Instance ID Migration</name>
+  <description>Process Instance ID Migration</description>
+  <properties>
+    <version.org.kie>6.5.0.Final-redhat-2</version.org.kie>
+    <version.org.postgresql>42.2.10</version.org.postgresql>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.kie</groupId>
+      <artifactId>kie-api</artifactId>
+      <version>${version.org.kie}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jbpm</groupId>
+      <artifactId>jbpm-flow</artifactId>
+      <version>${version.org.kie}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jbpm</groupId>
+      <artifactId>jbpm-bpmn2</artifactId>
+      <version>${version.org.kie}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jbpm</groupId>
+      <artifactId>jbpm-human-task-workitems</artifactId>
+      <version>${version.org.kie}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-persistence-jpa</artifactId>
+      <version>${version.org.kie}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>1.7.30</version>
+    </dependency>
+
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>1.2.3</version>
+    </dependency>
+
+    <!-- Database -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>${version.org.postgresql}</version>
+			<scope>compile</scope>
+		</dependency>
+
+    <!-- Put your KJAR dependency here. This needs to be the KJAR that contains the process definition of the process instance you try to change.dependency>
+      This is required in order to have the required classes on your classpath.
+       -->
+    <!--
+    <dependency>
+      <groupId>org.acme</groupId>
+      <artifactId>sample-kjar</artifactId>
+      <version>1.0.0-SNAPSHOT</version>
+    </dependency>
+    -->
+
+
+  </dependencies>
+</project>
+
