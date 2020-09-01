@@ -50,13 +50,12 @@
       <version>1.2.3</version>
     </dependency>
 
-    <!-- Database -->
-		<dependency>
-			<groupId>org.postgresql</groupId>
-			<artifactId>postgresql</artifactId>
-			<version>${version.org.postgresql}</version>
-			<scope>compile</scope>
-		</dependency>
+    <!-- https://mvnrepository.com/artifact/com.oracle.ojdbc/ojdbc8 -->
+<dependency>
+    <groupId>com.oracle.ojdbc</groupId>
+    <artifactId>ojdbc8</artifactId>
+    <version>19.3.0.0</version>
+</dependency>
 
     <!-- Put your KJAR dependency here. This needs to be the KJAR that contains the process definition of the process instance you try to change.dependency>
       This is required in order to have the required classes on your classpath.

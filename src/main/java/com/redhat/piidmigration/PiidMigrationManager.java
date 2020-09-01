@@ -37,8 +37,6 @@ import org.kie.api.marshalling.ObjectMarshallingStrategyStore;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.process.ProcessInstance;
-import org.postgresql.largeobject.LargeObject;
-import org.postgresql.largeobject.LargeObjectManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,67 +63,72 @@ public class PiidMigrationManager {
 
     public static void main(final String[] args) throws Exception {
 
-        final String url = "jdbc:postgresql://localhost:5432/bpmsuite-64";
-        final String user = "postgres";
-        final String password = "postgres";
+        final String url = "jdbc:oracle:thin:@simpsons:1521:cdb1";
+        final String user = "c##bart";
+        final String password = "bart1987";
 
         //The id to which I want to change my process instance
-        final long processInstanceId = 30070L;
+        final long processInstanceId = 21L;
 
         KieServices ks = KieServices.Factory.get();
 	    KieContainer kContainer = ks.getKieClasspathContainer();
         KieSession kieSession = kContainer.newKieSession();
 
+         
+        
         LOGGER.debug("Connection to DB!");
         final Connection conn = connect(url, user, password);
         //Need to disable auto-commit in order to work with LargeObjects
         conn.setAutoCommit(false);
         
         processProcessInstances(processInstanceId, conn, kieSession);
-        processWorkItems(processInstanceId, conn, kieSession);
+        //processWorkItems(processInstanceId, conn, kieSession);
         
         conn.close();
 
     }
 
     private static void processProcessInstances(long processInstanceId, Connection conn, KieSession kieSession) throws Exception {
+       // final PreparedStatement ps = conn.prepareStatement("SELECT processinstancebytearray FROM processinstanceinfo p WHERE p.instanceid = ?");
         final PreparedStatement ps = conn
-                .prepareStatement("SELECT processinstancebytearray FROM processinstanceinfo p WHERE p.instanceid = ?");
+                .prepareStatement("SELECT PROCESSID FROM processinstanceinfo p WHERE p.instanceid = ?");
         ps.setLong(1, processInstanceId);
 
         LOGGER.debug("Retrieving ProcessInstance bytearray");
         final ResultSet resultSet = ps.executeQuery();
 
         if (resultSet.next()) {
+        	
+        	System.out.println(resultSet.getString("PROCESSID"));
             
-            int columnIndex = 1;
-            LargeObjectManager lobj = ((org.postgresql.PGConnection) conn).getLargeObjectAPI();
-            long oid = resultSet.getLong(columnIndex);
-
-            if (oid < 1) {
-                throw new RuntimeException("Invalid bytearray object id!");
-            }
-
-            LargeObject obj = lobj.open(oid, LargeObjectManager.READ);
-
-            //Get the ProcessInstance byte array from the large object
-            byte[] processInstanceByteArray = new byte[obj.size()];
-            obj.read(processInstanceByteArray, 0, obj.size());
-
-            //Unmarshal the byte array into a ProcessInstance object.
-            ProcessInstance processInstance = unmarshalProcessInstance(processInstanceByteArray, kieSession);
-            LOGGER.debug("Unmarshalled ProcessInstance with instance-id: " + processInstance.getId());
-
-            //Change the processInstance Id 
-            ((RuleFlowProcessInstance) processInstance).setId(processInstanceId);
-
-            //Marshal the object back into a byte-array.
-            byte[] marshalledProcessInstanceByteArray = marshalProcessInstance(processInstance, kieSession);
-            
-            //Write the byte array back to the database.
-            LargeObject objWrite = lobj.open(oid, LargeObjectManager.WRITE);
-            objWrite.write(marshalledProcessInstanceByteArray);
-            conn.commit();
+			/*
+			 * int columnIndex = 1; LargeObjectManager lobj = ((org.postgresql.PGConnection)
+			 * conn).getLargeObjectAPI(); long oid = resultSet.getLong(columnIndex);
+			 * 
+			 * if (oid < 1) { throw new RuntimeException("Invalid bytearray object id!"); }
+			 * 
+			 * LargeObject obj = lobj.open(oid, LargeObjectManager.READ);
+			 * 
+			 * //Get the ProcessInstance byte array from the large object byte[]
+			 * processInstanceByteArray = new byte[obj.size()];
+			 * obj.read(processInstanceByteArray, 0, obj.size());
+			 * 
+			 * //Unmarshal the byte array into a ProcessInstance object. ProcessInstance
+			 * processInstance = unmarshalProcessInstance(processInstanceByteArray,
+			 * kieSession); LOGGER.debug("Unmarshalled ProcessInstance with instance-id: " +
+			 * processInstance.getId());
+			 * 
+			 * //Change the processInstance Id ((RuleFlowProcessInstance)
+			 * processInstance).setId(processInstanceId);
+			 * 
+			 * //Marshal the object back into a byte-array. byte[]
+			 * marshalledProcessInstanceByteArray = marshalProcessInstance(processInstance,
+			 * kieSession);
+			 * 
+			 * //Write the byte array back to the database. LargeObject objWrite =
+			 * lobj.open(oid, LargeObjectManager.WRITE);
+			 * objWrite.write(marshalledProcessInstanceByteArray); conn.commit();
+			 */
         }
     }
 
@@ -139,34 +142,30 @@ public class PiidMigrationManager {
 
         while (resultSetWorkItem.next()) {
             
-            int columnIndex = 1;
-            LargeObjectManager lobj = ((org.postgresql.PGConnection) conn).getLargeObjectAPI();
-            long oid = resultSetWorkItem.getLong(columnIndex);
-
-            if (oid < 1) {
-                throw new RuntimeException("Invalid bytearray object id!");
-            }
-
-            LargeObject obj = lobj.open(oid, LargeObjectManager.READ);
-
-            //Get the WorkItem byte array from the large object
-            byte[] workItemByteArray = new byte[obj.size()];
-            obj.read(workItemByteArray, 0, obj.size());
-
-            //Unmarshall the byte array into a WorkItem.
-            WorkItem workItem = unmarshalWorkItem(workItemByteArray, kieSession);
-            LOGGER.debug("Unmarshalled WorkItem with instance-id: " + workItem.getId());
-
-            //Change ProcessInstanceId.
-            workItem.setProcessInstanceId(processInstanceId);
-
-            //Marshall the object back into a byte array.
-            byte[] marshalledWorkItemByteArray = marshalWorkItem(workItem, kieSession);
-            
-            //Write back to the DB.
-            LargeObject objWrite = lobj.open(oid, LargeObjectManager.WRITE);
-            objWrite.write(marshalledWorkItemByteArray);
-            conn.commit();
+			/*
+			 * int columnIndex = 1; LargeObjectManager lobj = ((org.postgresql.PGConnection)
+			 * conn).getLargeObjectAPI(); long oid = resultSetWorkItem.getLong(columnIndex);
+			 * 
+			 * if (oid < 1) { throw new RuntimeException("Invalid bytearray object id!"); }
+			 * 
+			 * LargeObject obj = lobj.open(oid, LargeObjectManager.READ);
+			 * 
+			 * //Get the WorkItem byte array from the large object byte[] workItemByteArray
+			 * = new byte[obj.size()]; obj.read(workItemByteArray, 0, obj.size());
+			 * 
+			 * //Unmarshall the byte array into a WorkItem. WorkItem workItem =
+			 * unmarshalWorkItem(workItemByteArray, kieSession);
+			 * LOGGER.debug("Unmarshalled WorkItem with instance-id: " + workItem.getId());
+			 * 
+			 * //Change ProcessInstanceId. workItem.setProcessInstanceId(processInstanceId);
+			 * 
+			 * //Marshall the object back into a byte array. byte[]
+			 * marshalledWorkItemByteArray = marshalWorkItem(workItem, kieSession);
+			 * 
+			 * //Write back to the DB. LargeObject objWrite = lobj.open(oid,
+			 * LargeObjectManager.WRITE); objWrite.write(marshalledWorkItemByteArray);
+			 * conn.commit();
+			 */
         }
 
     }
@@ -175,7 +174,7 @@ public class PiidMigrationManager {
         Connection conn = null;
         try {
             conn = DriverManager.getConnection(url, user, password);
-            System.out.println("Connected to the PostgreSQL server successfully.");
+            System.out.println("Connected to Oracle successfully.");
         } catch (final SQLException e) {
             System.out.println(e.getMessage());
         }
