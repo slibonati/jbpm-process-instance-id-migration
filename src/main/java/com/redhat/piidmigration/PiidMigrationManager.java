@@ -1,13 +1,13 @@
 package com.redhat.piidmigration;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -33,6 +33,7 @@ import org.jbpm.marshalling.impl.ProcessInstanceMarshaller;
 import org.jbpm.marshalling.impl.ProcessMarshallerRegistry;
 import org.jbpm.marshalling.impl.ProtobufRuleFlowProcessInstanceMarshaller;
 import org.jbpm.process.instance.impl.ProcessInstanceImpl;
+import org.jbpm.ruleflow.instance.RuleFlowProcessInstance;
 import org.kie.api.KieServices;
 import org.kie.api.marshalling.ObjectMarshallingStrategyStore;
 import org.kie.api.runtime.KieContainer;
@@ -97,9 +98,7 @@ public class PiidMigrationManager {
 
 		if (resultSet.next()) {
 
-			int columnIndex = 1;
-			
-			java.sql.Blob blob = (java.sql.Blob) resultSet.getObject(columnIndex);
+			Blob blob = (java.sql.Blob) resultSet.getObject(1);
 
 			InputStream binaryStream = blob.getBinaryStream();
 
@@ -108,19 +107,16 @@ public class PiidMigrationManager {
 			// Unmarshal the byte array into a ProcessInstance object. ProcessInstance
 			ProcessInstance processInstance = unmarshalProcessInstance(processInstanceByteArray, kieSession);
 			LOGGER.debug("Unmarshalled ProcessInstance with instance-id: " + processInstance.getId());
-			
-			/*
-			 * //Change the processInstance Id ((RuleFlowProcessInstance)
-			 * processInstance).setId(processInstanceId);
-			 * 
-			 * //Marshal the object back into a byte-array. byte[]
-			 * marshalledProcessInstanceByteArray = marshalProcessInstance(processInstance,
-			 * kieSession);
-			 * 
-			 * //Write the byte array back to the database. LargeObject objWrite =
-			 * lobj.open(oid, LargeObjectManager.WRITE);
-			 * objWrite.write(marshalledProcessInstanceByteArray); conn.commit();
-			 */
+
+			// Change the processInstance Id
+			((RuleFlowProcessInstance) processInstance).setId(processInstanceId);
+
+			// Marshal the object back into a byte-array.
+			byte[] marshalledProcessInstanceByteArray = marshalProcessInstance(processInstance, kieSession);
+
+			//Write the byte array back to the database.
+			insertBlob(conn, "processinstanceinfo", "instanceid", "processinstancebytearray", processInstanceId,
+					marshalledProcessInstanceByteArray);
 
 		}
 	}
@@ -189,7 +185,7 @@ public class PiidMigrationManager {
 			throws Exception {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
-		String processInstanceType = "RuleFlow";
+		// String processInstanceType = "RuleFlow";
 
 		try {
 			ProcessMarshallerWriteContext context = new ProcessMarshallerWriteContext(baos, null, null, null, null,
@@ -239,7 +235,7 @@ public class PiidMigrationManager {
 		ObjectInputStream stream = context.stream;
 		String processInstanceType = stream.readUTF();
 		LOGGER.debug("ProcessInstanceType: " + processInstanceType);
-		
+
 		ProtobufRuleFlowProcessInstanceMarshaller processMarshaller = (ProtobufRuleFlowProcessInstanceMarshaller) ProcessMarshallerRegistry.INSTANCE
 				.getMarshaller(processInstanceType);
 
@@ -252,7 +248,7 @@ public class PiidMigrationManager {
 		}
 
 		context.close();
-	
+
 		return processInstance;
 	}
 
@@ -306,13 +302,25 @@ public class PiidMigrationManager {
 		return workItem;
 	}
 
-	private static byte[] readBinaryData(String fileName) throws IOException {
-		byte[] bytes = Files.readAllBytes(Paths.get(fileName));
-		return bytes;
-	}
+	private static void insertBlob(final Connection conn, final String tableName, final String idColumnName,
+			final String updateColumnName, final long id, final byte value[]) throws SQLException, IOException {
 
-	private static void writeBinaryData(byte[] data, String fileName) throws IOException {
-		Files.write(Paths.get(fileName), data);
-	}
+		String sql = String.format("UPDATE %1$s SET %2$s = ? where %3$s = ?", tableName, updateColumnName,
+				idColumnName);
+		LOGGER.debug(sql);
 
+		try (final PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+			final Blob blob = conn.createBlob();
+			try (final BufferedOutputStream out = new BufferedOutputStream(blob.setBinaryStream(1L))) {
+				out.write(value);
+			}
+
+			pstmt.setBlob(1, blob);
+			pstmt.setLong(2, id);
+			int retVal = pstmt.executeUpdate();
+
+			LOGGER.debug("executeUpdate return value: " + retVal);
+		}
+	}
 }

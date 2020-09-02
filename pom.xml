@@ -11,8 +11,7 @@
 	<name>Process Instance ID Migration</name>
 	<description>Process Instance ID Migration</description>
 	<properties>
-		<!--  <version.org.kie>6.5.0.Final-redhat-2</version.org.kie>  -->
-		<version.org.kie>7.14.0.Final-redhat-00004</version.org.kie> 
+		<version.org.kie>7.14.0.Final-redhat-00004</version.org.kie>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -41,10 +40,10 @@
 			<version>${version.org.kie}</version>
 		</dependency>
 		<dependency>
-    <groupId>org.drools</groupId>
-    <artifactId>drools-workbench-models-guided-dtable</artifactId>
-    <version>${version.org.kie}</version>
-</dependency>
+			<groupId>org.drools</groupId>
+			<artifactId>drools-workbench-models-guided-dtable</artifactId>
+			<version>${version.org.kie}</version>
+		</dependency>
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
@@ -74,7 +73,6 @@
 			<artifactId>mortgage-process</artifactId>
 			<version>1.0.0-SNAPSHOT</version>
 		</dependency>
-
 	</dependencies>
 	<build>
 		<finalName>processinstanceid-migration</finalName>
@@ -93,4 +91,3 @@
 		</pluginManagement>
 	</build>
 </project>
-

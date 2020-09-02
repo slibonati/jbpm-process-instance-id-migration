@@ -4,4 +4,8 @@ This is an example project that shows how to change the `processInstanceId` of p
 
 Also, this code is not complete. It only allows to alter the `processInstanceId` in 2 places, in the `ProcessInstance` and the `WorkItem` instance. The id is however stored in multiple places, so this code currently only works for simple use-cases.
 
-This project targets a PostgreSQL 10.x database.
+This project targets a Oracle 19c database.
+
+Requires Red Hat GA repo's to bet set up. Doing this in maven settings.xml. 
+
+Also requires KJAR that contains the process definition of the process instance you are trying to change. See pom.xml.
