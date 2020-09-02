@@ -11,8 +11,8 @@
 	<name>Process Instance ID Migration</name>
 	<description>Process Instance ID Migration</description>
 	<properties>
-		<!--  <version.org.kie>6.5.0.Final-redhat-2</version.org.kie>  -->
-		<version.org.kie>7.14.0.Final-redhat-00004</version.org.kie> 
+		<version.org.kie>6.5.0.Final-redhat-2</version.org.kie>
+		<version.org.postgresql>42.2.10</version.org.postgresql>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -41,11 +41,6 @@
 			<version>${version.org.kie}</version>
 		</dependency>
 		<dependency>
-    <groupId>org.drools</groupId>
-    <artifactId>drools-workbench-models-guided-dtable</artifactId>
-    <version>${version.org.kie}</version>
-</dependency>
-		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
 			<version>1.7.30</version>
@@ -57,27 +52,20 @@
 			<version>1.2.3</version>
 		</dependency>
 
-		<dependency>
-			<groupId>commons-io</groupId>
-			<artifactId>commons-io</artifactId>
-			<version>2.7</version>
-		</dependency>
-
+		<!-- https://mvnrepository.com/artifact/com.oracle.ojdbc/ojdbc8 -->
 		<dependency>
 			<groupId>com.oracle.ojdbc</groupId>
 			<artifactId>ojdbc8</artifactId>
 			<version>19.3.0.0</version>
 		</dependency>
 
-		<dependency>
-			<groupId>mortgage-process</groupId>
-			<artifactId>mortgage-process</artifactId>
-			<version>1.0.0-SNAPSHOT</version>
-		</dependency>
-
+		<!-- Put your KJAR dependency here. This needs to be the KJAR that contains 
+			the process definition of the process instance you try to change.dependency> 
+			This is required in order to have the required classes on your classpath. -->
+		<!-- <dependency> <groupId>org.acme</groupId> <artifactId>sample-kjar</artifactId> 
+			<version>1.0.0-SNAPSHOT</version> </dependency> -->
 	</dependencies>
 	<build>
-		<finalName>processinstanceid-migration</finalName>
 		<pluginManagement>
 			<plugins>
 				<plugin>
@@ -88,6 +76,29 @@
 						<source>1.8</source>
 						<target>1.8</target>
 					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-shade-plugin</artifactId>
+					<version>3.2.4</version>
+					<executions>
+						<execution>
+							<phase>package</phase>
+							<goals>
+								<goal>shade</goal>
+							</goals>
+							<configuration>
+								<transformers>
+									<transformer
+										implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+										<manifestEntries>
+											<mainClass>com.redhat.piidmigration.PiidMigrationManager</mainClass>
+										</manifestEntries>
+									</transformer>
+								</transformers>
+							</configuration>
+						</execution>
+					</executions>
 				</plugin>
 			</plugins>
 		</pluginManagement>

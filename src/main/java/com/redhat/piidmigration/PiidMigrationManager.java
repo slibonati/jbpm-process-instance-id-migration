@@ -3,6 +3,7 @@ package com.redhat.piidmigration;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.nio.file.Files;
@@ -14,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 
+import org.apache.commons.io.IOUtils;
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.impl.InternalKnowledgeBase;
 import org.drools.core.impl.StatefulKnowledgeSessionImpl;
@@ -31,7 +33,6 @@ import org.jbpm.marshalling.impl.ProcessInstanceMarshaller;
 import org.jbpm.marshalling.impl.ProcessMarshallerRegistry;
 import org.jbpm.marshalling.impl.ProtobufRuleFlowProcessInstanceMarshaller;
 import org.jbpm.process.instance.impl.ProcessInstanceImpl;
-import org.jbpm.ruleflow.instance.RuleFlowProcessInstance;
 import org.kie.api.KieServices;
 import org.kie.api.marshalling.ObjectMarshallingStrategyStore;
 import org.kie.api.runtime.KieContainer;
@@ -40,84 +41,75 @@ import org.kie.api.runtime.process.ProcessInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
-
 /**
- * All the ProtobufMessages that make up the bytearray can be found here: https://github.com/kiegroup/jbpm/blob/master/jbpm-flow/src/main/resources/org/jbpm/marshalling/jbpmmessages.proto
+ * All the ProtobufMessages that make up the bytearray can be found here:
+ * https://github.com/kiegroup/jbpm/blob/master/jbpm-flow/src/main/resources/org/jbpm/marshalling/jbpmmessages.proto
  * 
  * So far, I've found the following messages that reference process-instance-id:
  * 
- * ProcessInstance.id
- * ProcessInstance.parent_process_instance_id
+ * ProcessInstance.id ProcessInstance.parent_process_instance_id
  * HumanTaskNode.error_handling_process_instance_id
  * WorkItemNode.error_handling_process_instance_id
- * SubProcessNode.process_instance_id
- * WorkItemNode.process_instances_id
+ * SubProcessNode.process_instance_id WorkItemNode.process_instances_id
  * 
- * DISCLAIMER: This operation is extremely dangerous! And only tested on very simple use-cases. Currently it is only capable of 
+ * DISCLAIMER: This operation is extremely dangerous! And only tested on very
+ * simple use-cases. Currently it is only capable of
  * 
  */
 public class PiidMigrationManager {
-    
-    private static final Logger LOGGER = LoggerFactory.getLogger(PiidMigrationManager.class);
 
-    public static void main(final String[] args) throws Exception {
+	private static final Logger LOGGER = LoggerFactory.getLogger(PiidMigrationManager.class);
 
-        final String url = "jdbc:oracle:thin:@simpsons:1521:cdb1";
-        final String user = "c##bart";
-        final String password = "bart1987";
+	public static void main(final String[] args) throws Exception {
 
-        //The id to which I want to change my process instance
-        final long processInstanceId = 21L;
+		final String url = "jdbc:oracle:thin:@simpsons:1521:cdb1";
+		final String user = "c##bart";
+		final String password = "bart1987";
 
-        KieServices ks = KieServices.Factory.get();
-	    KieContainer kContainer = ks.getKieClasspathContainer();
-        KieSession kieSession = kContainer.newKieSession();
+		// The id to which I want to change my process instance
+		final long processInstanceId = 21L;
 
-         
-        
-        LOGGER.debug("Connection to DB!");
-        final Connection conn = connect(url, user, password);
-        //Need to disable auto-commit in order to work with LargeObjects
-        conn.setAutoCommit(false);
-        
-        processProcessInstances(processInstanceId, conn, kieSession);
-        //processWorkItems(processInstanceId, conn, kieSession);
-        
-        conn.close();
+		KieServices ks = KieServices.Factory.get();
+		KieContainer kContainer = ks.getKieClasspathContainer();
+		KieSession kieSession = kContainer.newKieSession();
 
-    }
+		LOGGER.debug("Connection to DB!");
+		final Connection conn = connect(url, user, password);
+		// Need to disable auto-commit in order to work with LargeObjects
+		conn.setAutoCommit(false);
 
-    private static void processProcessInstances(long processInstanceId, Connection conn, KieSession kieSession) throws Exception {
-       // final PreparedStatement ps = conn.prepareStatement("SELECT processinstancebytearray FROM processinstanceinfo p WHERE p.instanceid = ?");
-        final PreparedStatement ps = conn
-                .prepareStatement("SELECT PROCESSID FROM processinstanceinfo p WHERE p.instanceid = ?");
-        ps.setLong(1, processInstanceId);
+		processProcessInstances(processInstanceId, conn, kieSession);
+		// processWorkItems(processInstanceId, conn, kieSession);
 
-        LOGGER.debug("Retrieving ProcessInstance bytearray");
-        final ResultSet resultSet = ps.executeQuery();
+		conn.close();
 
-        if (resultSet.next()) {
-        	
-        	System.out.println(resultSet.getString("PROCESSID"));
-            
+	}
+
+	private static void processProcessInstances(long processInstanceId, Connection conn, KieSession kieSession)
+			throws Exception {
+		final PreparedStatement ps = conn
+				.prepareStatement("SELECT processinstancebytearray FROM processinstanceinfo p WHERE p.instanceid = ?");
+
+		ps.setLong(1, processInstanceId);
+
+		LOGGER.debug("Retrieving ProcessInstance bytearray");
+		final ResultSet resultSet = ps.executeQuery();
+
+		if (resultSet.next()) {
+
+			int columnIndex = 1;
+			
+			java.sql.Blob blob = (java.sql.Blob) resultSet.getObject(columnIndex);
+
+			InputStream binaryStream = blob.getBinaryStream();
+
+			byte[] processInstanceByteArray = IOUtils.toByteArray(binaryStream);
+
+			// Unmarshal the byte array into a ProcessInstance object. ProcessInstance
+			ProcessInstance processInstance = unmarshalProcessInstance(processInstanceByteArray, kieSession);
+			LOGGER.debug("Unmarshalled ProcessInstance with instance-id: " + processInstance.getId());
+			
 			/*
-			 * int columnIndex = 1; LargeObjectManager lobj = ((org.postgresql.PGConnection)
-			 * conn).getLargeObjectAPI(); long oid = resultSet.getLong(columnIndex);
-			 * 
-			 * if (oid < 1) { throw new RuntimeException("Invalid bytearray object id!"); }
-			 * 
-			 * LargeObject obj = lobj.open(oid, LargeObjectManager.READ);
-			 * 
-			 * //Get the ProcessInstance byte array from the large object byte[]
-			 * processInstanceByteArray = new byte[obj.size()];
-			 * obj.read(processInstanceByteArray, 0, obj.size());
-			 * 
-			 * //Unmarshal the byte array into a ProcessInstance object. ProcessInstance
-			 * processInstance = unmarshalProcessInstance(processInstanceByteArray,
-			 * kieSession); LOGGER.debug("Unmarshalled ProcessInstance with instance-id: " +
-			 * processInstance.getId());
-			 * 
 			 * //Change the processInstance Id ((RuleFlowProcessInstance)
 			 * processInstance).setId(processInstanceId);
 			 * 
@@ -129,19 +121,21 @@ public class PiidMigrationManager {
 			 * lobj.open(oid, LargeObjectManager.WRITE);
 			 * objWrite.write(marshalledProcessInstanceByteArray); conn.commit();
 			 */
-        }
-    }
 
-    private static void processWorkItems(long processInstanceId, Connection conn, KieSession kieSession) throws Exception {
-        final PreparedStatement psWorkItem = conn
-                .prepareStatement("SELECT workitembytearray FROM workiteminfo w WHERE w.processinstanceid = ?");
-        psWorkItem.setLong(1, processInstanceId);
+		}
+	}
 
-        LOGGER.debug("Retrieving WorrkItem bytearray");
-        final ResultSet resultSetWorkItem = psWorkItem.executeQuery();
+	private static void processWorkItems(long processInstanceId, Connection conn, KieSession kieSession)
+			throws Exception {
+		final PreparedStatement psWorkItem = conn
+				.prepareStatement("SELECT workitembytearray FROM workiteminfo w WHERE w.processinstanceid = ?");
+		psWorkItem.setLong(1, processInstanceId);
 
-        while (resultSetWorkItem.next()) {
-            
+		LOGGER.debug("Retrieving WorrkItem bytearray");
+		final ResultSet resultSetWorkItem = psWorkItem.executeQuery();
+
+		while (resultSetWorkItem.next()) {
+
 			/*
 			 * int columnIndex = 1; LargeObjectManager lobj = ((org.postgresql.PGConnection)
 			 * conn).getLargeObjectAPI(); long oid = resultSetWorkItem.getLong(columnIndex);
@@ -166,87 +160,86 @@ public class PiidMigrationManager {
 			 * LargeObjectManager.WRITE); objWrite.write(marshalledWorkItemByteArray);
 			 * conn.commit();
 			 */
-        }
+		}
 
-    }
+	}
 
-    public static Connection connect(final String url, final String user, final String password) {
-        Connection conn = null;
-        try {
-            conn = DriverManager.getConnection(url, user, password);
-            System.out.println("Connected to Oracle successfully.");
-        } catch (final SQLException e) {
-            System.out.println(e.getMessage());
-        }
+	public static Connection connect(final String url, final String user, final String password) {
+		Connection conn = null;
+		try {
+			conn = DriverManager.getConnection(url, user, password);
+			System.out.println("Connected to Oracle successfully.");
+		} catch (final SQLException e) {
+			System.out.println(e.getMessage());
+		}
 
-        return conn;
-    }
+		return conn;
+	}
 
-	public static ProcessInstance unmarshalProcessInstance(byte[] processInstanceByteArray, KieSession kieSession) throws Exception {
+	public static ProcessInstance unmarshalProcessInstance(byte[] processInstanceByteArray, KieSession kieSession)
+			throws Exception {
 
-        byte[] data = processInstanceByteArray;
+		byte[] data = processInstanceByteArray;
 		ProcessInstance processInstance = unmarshallProcessInstances(data, kieSession);
-        
-        return processInstance;
-    }
-    
-    public static byte[]  marshalProcessInstance(ProcessInstance processInstance, KieSession kieSession) throws Exception {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    
-        String processInstanceType = "RuleFlow";
-        
-        try {
-            ProcessMarshallerWriteContext context = new ProcessMarshallerWriteContext(baos, null, null, null, null, kieSession.getEnvironment());
-            
-            context.setProcessInstanceId(processInstance.getId());
-            context.setState(processInstance.getState() == ProcessInstance.STATE_ACTIVE ? 
-                    ProcessMarshallerWriteContext.STATE_ACTIVE:ProcessMarshallerWriteContext.STATE_COMPLETED);
-            
-            String processType = ((ProcessInstanceImpl) processInstance).getProcess().getType();
-            saveProcessInstanceType( context,
-                                     processInstance,
-                                     processType );
-            ProcessInstanceMarshaller marshaller = ProcessMarshallerRegistry.INSTANCE.getMarshaller( processType );
-            
-            Object result = marshaller.writeProcessInstance( context,
-                                                             processInstance);
-            if( marshaller instanceof ProtobufRuleFlowProcessInstanceMarshaller && result != null ) {
-                JBPMMessages.ProcessInstance _instance = (JBPMMessages.ProcessInstance)result;
-                PersisterHelper.writeToStreamWithHeader( context, 
-                                                         _instance );
-            }
-            context.close();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
 
-        return baos.toByteArray();
+		return processInstance;
+	}
 
-    }
+	public static byte[] marshalProcessInstance(ProcessInstance processInstance, KieSession kieSession)
+			throws Exception {
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
-    private static void saveProcessInstanceType(MarshallerWriteContext context,
-                                         ProcessInstance processInstance,
-                                         String processInstanceType) throws IOException {
-        ObjectOutputStream stream = context.stream;
-        // saves the processInstance type first
-        stream.writeUTF( processInstanceType );
-    }
+		String processInstanceType = "RuleFlow";
 
+		try {
+			ProcessMarshallerWriteContext context = new ProcessMarshallerWriteContext(baos, null, null, null, null,
+					kieSession.getEnvironment());
+
+			context.setProcessInstanceId(processInstance.getId());
+			context.setState(processInstance.getState() == ProcessInstance.STATE_ACTIVE
+					? ProcessMarshallerWriteContext.STATE_ACTIVE
+					: ProcessMarshallerWriteContext.STATE_COMPLETED);
+
+			String processType = ((ProcessInstanceImpl) processInstance).getProcess().getType();
+			saveProcessInstanceType(context, processInstance, processType);
+			ProcessInstanceMarshaller marshaller = ProcessMarshallerRegistry.INSTANCE.getMarshaller(processType);
+
+			Object result = marshaller.writeProcessInstance(context, processInstance);
+			if (marshaller instanceof ProtobufRuleFlowProcessInstanceMarshaller && result != null) {
+				JBPMMessages.ProcessInstance _instance = (JBPMMessages.ProcessInstance) result;
+				PersisterHelper.writeToStreamWithHeader(context, _instance);
+			}
+			context.close();
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+
+		return baos.toByteArray();
+
+	}
+
+	private static void saveProcessInstanceType(MarshallerWriteContext context, ProcessInstance processInstance,
+			String processInstanceType) throws IOException {
+		ObjectOutputStream stream = context.stream;
+		// saves the processInstance type first
+		stream.writeUTF(processInstanceType);
+	}
 
 	private static ProcessInstance unmarshallProcessInstances(byte[] marshalledSessionByteArray, KieSession kieSession)
 			throws Exception {
 
 		ByteArrayInputStream bais = new ByteArrayInputStream(marshalledSessionByteArray);
-		MarshallerReaderContext context = new MarshallerReaderContext(bais, (InternalKnowledgeBase) kieSession.getKieBase(), null, null,
-                ProtobufMarshaller.TIMER_READERS, kieSession.getEnvironment());
-        
-        
+		MarshallerReaderContext context = new MarshallerReaderContext(bais,
+				(InternalKnowledgeBase) kieSession.getKieBase(), null, null, ProtobufMarshaller.TIMER_READERS,
+				kieSession.getEnvironment());
+
 		context.wm = ((StatefulKnowledgeSessionImpl) kieSession).getInternalWorkingMemory();
 
 		// Unmarshall
 		ObjectInputStream stream = context.stream;
-        String processInstanceType = stream.readUTF();
-        LOGGER.debug("ProcessInstanceType: " + processInstanceType);
+		String processInstanceType = stream.readUTF();
+		LOGGER.debug("ProcessInstanceType: " + processInstanceType);
+		
 		ProtobufRuleFlowProcessInstanceMarshaller processMarshaller = (ProtobufRuleFlowProcessInstanceMarshaller) ProcessMarshallerRegistry.INSTANCE
 				.getMarshaller(processInstanceType);
 
@@ -259,66 +252,67 @@ public class PiidMigrationManager {
 		}
 
 		context.close();
-
+	
 		return processInstance;
-    }
+	}
 
-    public static byte[] marshalWorkItem(WorkItem workItem, KieSession kieSession) {
-        long state = (long) workItem.getState();
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-  
-        try {
-           MarshallerWriteContext context = new MarshallerWriteContext(baos, (InternalKnowledgeBase)null, (InternalWorkingMemory)null, (Map)null, (ObjectMarshallingStrategyStore)null, kieSession.getEnvironment());
-        
-           ProtobufOutputMarshaller.writeWorkItem(context, workItem);
-           context.close();
-           byte[] workItemByteArray = baos.toByteArray();
-           return workItemByteArray;
-        } catch (IOException var3) {
-           throw new IllegalArgumentException("IOException while storing workItem " + workItem.getId() + ": " + var3.getMessage());
-        }
-     }
+	public static byte[] marshalWorkItem(WorkItem workItem, KieSession kieSession) {
+		long state = (long) workItem.getState();
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
-     public static WorkItem unmarshalWorkItem(byte[] workItemByteArray, KieSession kieSession) {
-        WorkItem workItem = null;
-        try {
-              ByteArrayInputStream bais = new ByteArrayInputStream(workItemByteArray);
-              MarshallerReaderContext context = new MarshallerReaderContext(bais, (InternalKnowledgeBase) kieSession.getKieBase(), (Map)null, (ObjectMarshallingStrategyStore)null, (Map)null, kieSession.getEnvironment());
-             
-              try {
-                 workItem = ProtobufInputMarshaller.readWorkItem(context);
-              } catch (Exception var8) {
-                 try {
-                    context.close();
-                    bais = new ByteArrayInputStream(workItemByteArray);
-                    context = new MarshallerReaderContext(bais, (InternalKnowledgeBase) kieSession.getKieBase(), (Map)null, (ObjectMarshallingStrategyStore)null, (Map)null, kieSession.getEnvironment());
-                    workItem = InputMarshaller.readWorkItem(context);
-                 } catch (IOException var7) {
-                    LOGGER.error("Unable to read work item with InputMarshaller", var7);
-                    throw new RuntimeException("Unable to read work item ", var8);
-                 }
-              }
-              context.close();
-           } catch (IOException var9) {
-              var9.printStackTrace();
-              throw new IllegalArgumentException("IOException while loading work item: " + var9.getMessage());
-           }
-  
-        return workItem;
-     }
+		try {
+			MarshallerWriteContext context = new MarshallerWriteContext(baos, (InternalKnowledgeBase) null,
+					(InternalWorkingMemory) null, (Map) null, (ObjectMarshallingStrategyStore) null,
+					kieSession.getEnvironment());
 
+			ProtobufOutputMarshaller.writeWorkItem(context, workItem);
+			context.close();
+			byte[] workItemByteArray = baos.toByteArray();
+			return workItemByteArray;
+		} catch (IOException var3) {
+			throw new IllegalArgumentException(
+					"IOException while storing workItem " + workItem.getId() + ": " + var3.getMessage());
+		}
+	}
 
-     private static byte[] readBinaryData(String fileName) throws IOException {
+	public static WorkItem unmarshalWorkItem(byte[] workItemByteArray, KieSession kieSession) {
+		WorkItem workItem = null;
+		try {
+			ByteArrayInputStream bais = new ByteArrayInputStream(workItemByteArray);
+			MarshallerReaderContext context = new MarshallerReaderContext(bais,
+					(InternalKnowledgeBase) kieSession.getKieBase(), (Map) null, (ObjectMarshallingStrategyStore) null,
+					(Map) null, kieSession.getEnvironment());
+
+			try {
+				workItem = ProtobufInputMarshaller.readWorkItem(context);
+			} catch (Exception var8) {
+				try {
+					context.close();
+					bais = new ByteArrayInputStream(workItemByteArray);
+					context = new MarshallerReaderContext(bais, (InternalKnowledgeBase) kieSession.getKieBase(),
+							(Map) null, (ObjectMarshallingStrategyStore) null, (Map) null, kieSession.getEnvironment());
+					workItem = InputMarshaller.readWorkItem(context);
+				} catch (IOException var7) {
+					LOGGER.error("Unable to read work item with InputMarshaller", var7);
+					throw new RuntimeException("Unable to read work item ", var8);
+				}
+			}
+			context.close();
+		} catch (IOException var9) {
+			var9.printStackTrace();
+			throw new IllegalArgumentException("IOException while loading work item: " + var9.getMessage());
+		}
+
+		return workItem;
+	}
+
+	private static byte[] readBinaryData(String fileName) throws IOException {
 		byte[] bytes = Files.readAllBytes(Paths.get(fileName));
 		return bytes;
-    }
-    
-    private static void writeBinaryData(byte[] data, String fileName) throws IOException {
-        Files.write(Paths.get(fileName), data);
-    }
+	}
+
+	private static void writeBinaryData(byte[] data, String fileName) throws IOException {
+		Files.write(Paths.get(fileName), data);
+	}
 
 }
-
-
-
-
